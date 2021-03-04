@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.signal as signal
+import pdb
 
 
 def split_ts_seq(ts_seq, sep_ts):
@@ -103,7 +104,8 @@ def correct_positions(rel_positions, reference_positions):
 
 def init_parameters_filter(sample_freq, warmup_data, cut_off_freq=2):
     order = 4
-    filter_b, filter_a = signal.butter(order, cut_off_freq / (sample_freq / 2), 'low', False)
+    # filter_b, filter_a = signal.butter(order, cut_off_freq / (sample_freq / 2), 'low', False)
+    filter_b, filter_a = signal.butter(order, cut_off_freq, "low", False, fs=sample_freq)
     zf = signal.lfilter_zi(filter_b, filter_a)
     _, zf = signal.lfilter(filter_b, filter_a, warmup_data, zi=zf)
     _, filter_zf = signal.lfilter(filter_b, filter_a, warmup_data, zi=zf)
@@ -199,6 +201,7 @@ def compute_steps(acce_datas):
     step_criterion = 1
     interval_threshold = 250
 
+    # min/max acceleration at any given timestep
     acce_max = np.zeros((2,))
     acce_min = np.zeros((2,))
     acce_binarys = np.zeros((window_size,), dtype=int)
@@ -238,14 +241,17 @@ def compute_steps(acce_datas):
             acce_binarys = np.append(acce_binarys, [0])
             acce_binarys = np.delete(acce_binarys, 0)
 
+        # peak detected
         if (acce_binarys[-1] == 0) and (acce_binarys[-2] == 1):
             if state_flag == 0:
                 acce_max[:] = acce_data[0], acce_mag_filt
                 state_flag = 1
             elif (state_flag == 1) and ((acce_data[0] - acce_max[0]) <= interval_threshold) and (
                     acce_mag_filt > acce_max[1]):
+                # stay on peak but a higher one
                 acce_max[:] = acce_data[0], acce_mag_filt
             elif (state_flag == 2) and ((acce_data[0] - acce_max[0]) > interval_threshold):
+                # transition from a valley to a peak with interval larger than interval_threshold
                 acce_max[:] = acce_data[0], acce_mag_filt
                 state_flag = 1
 
@@ -261,12 +267,16 @@ def compute_steps(acce_datas):
         else:
             if (acce_binarys[-1] == 0) and acce_binarys[-2] == -1:
                 if (state_flag == 1) and ((acce_data[0] - acce_min[0]) > interval_threshold):
+                    # transition from a peak to a valley with ts greater than interval threshold
                     acce_min[:] = acce_data[0], acce_mag_filt
                     state_flag = 2
                     step_flag = True
                 elif (state_flag == 2) and ((acce_data[0] - acce_min[0]) <= interval_threshold) and (
                         acce_mag_filt < acce_min[1]):
+                    # stay in valley but a lower one
                     acce_min[:] = acce_data[0], acce_mag_filt
+
+        # if a step is taken
         if step_flag:
             step_timestamps = np.append(step_timestamps, acce_data[0])
             step_indexs = np.append(step_indexs, [i])
