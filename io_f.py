@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 
+import re
+import pandas as pd
 import numpy as np
 
+from constants import *
 
 @dataclass
 class ReadData:
@@ -102,3 +105,80 @@ def read_data_file(data_filename):
     waypoint = np.array(waypoint)
 
     return ReadData(acce, acce_uncali, gyro, gyro_uncali, magn, magn_uncali, ahrs, wifi, ibeacon, waypoint)
+
+
+
+def get_sensor_fields(sensor_type):
+    return SENSOR_FIELDS[sensor_type]
+
+# def read_path_data(fpath, prefix=None):
+#     if prefix:
+#         fpath = os.path.join(prefix, fpath)
+        
+#     with open(fpath) as pathfile:
+#         pathdata = pathfile.readlines()
+        
+#     # parse path data here
+#     return pathdata
+
+def parse_line(l):
+    parsed_info = {}
+    data_type = METADATA
+    matches = re.findall(r"((\w+):(\w+))+", l, re.MULTILINE | re.UNICODE)
+
+    if matches:
+        for m in matches:
+            parsed_info[m[1]] = m[2]
+    else:
+        sensor_data = l.split("\t")
+        
+        sensor_type = sensor_data[1]
+        if sensor_type not in SENSOR_FIELDS:
+            raise Exception(f"unknown sensor type: {sensor_type}")
+            
+        
+        sensor_fields = get_sensor_fields(sensor_type)
+        sensor_values = sensor_data[2:]
+        
+        if len(sensor_fields) != len(sensor_values):
+            assert f"sensor fields and values must be same length for {sensor_type}"
+        parsed_info[sensor_data[0]] = {k: float(v.rstrip()) for (k, v) in zip(sensor_fields, sensor_values)}
+        
+    
+        data_type = SENSORDATA
+        
+    return parsed_info, data_type
+
+def read_path_data(path_file):
+    metadata = {}
+    sensordata = {}
+    with open(path_file) as f:
+        for line in f.readlines():
+            try:
+                data, dtype = parse_line(line)
+            except Exception:
+                pass
+            
+            if dtype == METADATA:
+                metadata.update(data)
+            elif dtype == SENSORDATA:
+                sensordata.update(data)
+            else:
+                continue
+    return metadata, pd.DataFrame(sensordata).T
+
+def get_gt_path(df):
+    return df.loc[df.loc[:, "X"].notnull(), ["X", "Y"]].reset_index().values
+
+def get_sensor_values(df, sensor_names, to_val=False, dropna=True):
+    sensor_fields = []
+    for sensor in sensor_names:
+        sensor_fields.extend(SENSOR_FIELDS[sensor])
+    
+    sensor_values = df.loc[:, sensor_fields]
+    if dropna:
+        sensor_values = sensor_values.dropna()
+    
+    if to_val:
+        sensor_values.values
+    return sensor_values
