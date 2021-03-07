@@ -127,27 +127,35 @@ def get_sensor_fields(sensor_type):
 
 def parse_line(l):
     data_type = METADATA
-    matches = re.findall(r"((\w+):(\w+))+", l, re.MULTILINE | re.UNICODE)
 
     timestamp = None
-    payload = None
-    if matches:
-        payload = {m[1]: m[2] for m in matches}
+    payload = {} 
+    if l.startswith("#"):
+        matches = re.findall(r"((\w+):(\w+))+", l, re.MULTILINE | re.UNICODE)
+        for m in matches:
+            payload[m[1]] = m[2]
     else:
         sensor_data = l.split("\t")
         
         sensor_type = sensor_data[1]
+        # print('sensor_type: ', sensor_type)
+        if sensor_type == "TYPE_WIFI":
+            assert("WIFI FOUND")
         if sensor_type not in SENSOR_FIELDS:
             raise UnknownSensorException(f"unknown sensor type: {sensor_type}")
             
         sensor_fields = get_sensor_fields(sensor_type)
         sensor_values = sensor_data[2:]
-        
         if len(sensor_fields) != len(sensor_values):
             assert f"sensor fields and values must be same length for {sensor_type}"
         
         timestamp = sensor_data[0]
-        payload = {k: float(v.rstrip()) for (k, v) in zip(sensor_fields, sensor_values)}
+        for (k, v) in zip(sensor_fields, sensor_values):
+            try:
+                v = float(v.rstrip())
+            except:
+                pass
+            payload[k] = v
     
         data_type = SENSORDATA
     
@@ -156,7 +164,7 @@ def parse_line(l):
 def read_path_data(path_file):
     metadata = {}
     sensordata = {}
-    with open(path_file) as f:
+    with open(path_file, 'r', encoding='utf-8') as f:
         for line in f.readlines():
             try:
                 ts, payload, dtype = parse_line(line)
@@ -165,6 +173,7 @@ def read_path_data(path_file):
             except UnknownSensorException:
                 pass
             
+            print(payload)
             if dtype == METADATA:
                 metadata.update(payload)
             elif dtype == SENSORDATA:
