@@ -6,6 +6,7 @@ import numpy as np
 import pdb
 
 from constants import *
+from utils import flatten_dict
 
 class UnknownSensorException(Exception):
     pass
@@ -138,9 +139,6 @@ def parse_line(l):
         sensor_data = l.split("\t")
         
         sensor_type = sensor_data[1]
-        # print('sensor_type: ', sensor_type)
-        if sensor_type == "TYPE_WIFI":
-            assert("WIFI FOUND")
         if sensor_type not in SENSOR_FIELDS:
             raise UnknownSensorException(f"unknown sensor type: {sensor_type}")
             
@@ -163,34 +161,32 @@ def parse_line(l):
 
 def read_path_data(path_file):
     metadata = {}
-    sensordata = {}
+    sensor_data = {}
+
     with open(path_file, 'r', encoding='utf-8') as f:
-        for line in f.readlines():
+        for line_no, line in enumerate(f.readlines()):
             try:
                 ts, payload, dtype = parse_line(line)
                 if ts is not None:
                     ts = int(ts)
             except UnknownSensorException:
-                pass
+                continue
             
-            print(payload)
+            payload["TIMESTAMP"] = ts
+            
             if dtype == METADATA:
                 metadata.update(payload)
             elif dtype == SENSORDATA:
-                if ts not in sensordata:
-                    sensordata[ts] = payload
-                else:
-                    sensordata[ts].update(payload)
+                sensor_data[line_no] = payload
             else:
-                continue
-
-    return metadata, pd.DataFrame(sensordata).T
+                assert False
+    return metadata, pd.DataFrame(sensor_data).T
 
 def get_gt_path(df):
     return df.loc[df.loc[:, "X"].notnull(), ["X", "Y"]].reset_index().values
 
-def get_sensor_values(df, sensor_names, reset_index=False, to_val=False, dropna=True):
-    sensor_fields = []
+def get_sensor_values(df, sensor_names, with_ts=False, reset_index=False, to_val=False, dropna=True):
+    sensor_fields = ["TIMESTAMP"] if with_ts else []
     for sensor in sensor_names:
         sensor_fields.extend(SENSOR_FIELDS[sensor])
     
