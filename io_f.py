@@ -3,8 +3,12 @@ from dataclasses import dataclass
 import re
 import pandas as pd
 import numpy as np
+import pdb
 
 from constants import *
+
+class UnknownSensorException(Exception):
+    pass
 
 @dataclass
 class ReadData:
@@ -122,32 +126,32 @@ def get_sensor_fields(sensor_type):
 #     return pathdata
 
 def parse_line(l):
-    parsed_info = {}
     data_type = METADATA
     matches = re.findall(r"((\w+):(\w+))+", l, re.MULTILINE | re.UNICODE)
 
+    timestamp = None
+    payload = None
     if matches:
-        for m in matches:
-            parsed_info[m[1]] = m[2]
+        payload = {m[1]: m[2] for m in matches}
     else:
         sensor_data = l.split("\t")
         
         sensor_type = sensor_data[1]
         if sensor_type not in SENSOR_FIELDS:
-            raise Exception(f"unknown sensor type: {sensor_type}")
+            raise UnknownSensorException(f"unknown sensor type: {sensor_type}")
             
-        
         sensor_fields = get_sensor_fields(sensor_type)
         sensor_values = sensor_data[2:]
         
         if len(sensor_fields) != len(sensor_values):
             assert f"sensor fields and values must be same length for {sensor_type}"
-        parsed_info[sensor_data[0]] = {k: float(v.rstrip()) for (k, v) in zip(sensor_fields, sensor_values)}
         
+        timestamp = sensor_data[0]
+        payload = {k: float(v.rstrip()) for (k, v) in zip(sensor_fields, sensor_values)}
     
         data_type = SENSORDATA
-        
-    return parsed_info, data_type
+    
+    return timestamp, payload, data_type
 
 def read_path_data(path_file):
     metadata = {}
@@ -155,30 +159,39 @@ def read_path_data(path_file):
     with open(path_file) as f:
         for line in f.readlines():
             try:
-                data, dtype = parse_line(line)
-            except Exception:
+                ts, payload, dtype = parse_line(line)
+                if ts is not None:
+                    ts = int(ts)
+            except UnknownSensorException:
                 pass
             
             if dtype == METADATA:
-                metadata.update(data)
+                metadata.update(payload)
             elif dtype == SENSORDATA:
-                sensordata.update(data)
+                if ts not in sensordata:
+                    sensordata[ts] = payload
+                else:
+                    sensordata[ts].update(payload)
             else:
                 continue
+
     return metadata, pd.DataFrame(sensordata).T
 
 def get_gt_path(df):
     return df.loc[df.loc[:, "X"].notnull(), ["X", "Y"]].reset_index().values
 
-def get_sensor_values(df, sensor_names, to_val=False, dropna=True):
+def get_sensor_values(df, sensor_names, reset_index=False, to_val=False, dropna=True):
     sensor_fields = []
     for sensor in sensor_names:
         sensor_fields.extend(SENSOR_FIELDS[sensor])
     
     sensor_values = df.loc[:, sensor_fields]
+    if reset_index:
+        sensor_values = sensor_values.reset_index()
+
     if dropna:
         sensor_values = sensor_values.dropna()
     
     if to_val:
-        sensor_values.values
+        sensor_values = sensor_values.values
     return sensor_values
