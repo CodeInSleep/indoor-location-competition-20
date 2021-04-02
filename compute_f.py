@@ -15,7 +15,7 @@ def split_ts_seq(ts_seq, sep_ts):
     ts_seqs = []
     start_index = 0
     for i in range(0, unique_sep_ts.shape[0]):
-        end_index = np.searchsorted(tss, unique_sep_ts[i], side='right')
+        end_index = np.searchsorted(tss, unique_sep_ts[i], side="right")
         if start_index == end_index:
             continue
         ts_seqs.append(ts_seq[start_index:end_index, :].copy())
@@ -88,14 +88,16 @@ def correct_positions(rel_positions, reference_positions):
         # abs_ps[:, 1:3] = rel_ps[:, 1:3] + start_position[1:3]
         abs_ps[0, 1:3] = rel_ps[0, 1:3] + start_position[1:3]
         for j in range(1, rel_ps.shape[0]):
-            abs_ps[j, 1:3] = abs_ps[j-1, 1:3] + rel_ps[j, 1:3]
+            abs_ps[j, 1:3] = abs_ps[j - 1, 1:3] + rel_ps[j, 1:3]
         abs_ps = np.insert(abs_ps, 0, start_position, axis=0)
         corrected_xys = correct_trajectory(abs_ps[:, 1:3], end_position[1:3])
         corrected_ps = np.column_stack((abs_ps[:, 0], corrected_xys))
         if i == 0:
             corrected_positions = np.append(corrected_positions, corrected_ps, axis=0)
         else:
-            corrected_positions = np.append(corrected_positions, corrected_ps[1:], axis=0)
+            corrected_positions = np.append(
+                corrected_positions, corrected_ps[1:], axis=0
+            )
 
     corrected_positions = np.array(corrected_positions)
 
@@ -105,7 +107,9 @@ def correct_positions(rel_positions, reference_positions):
 def init_parameters_filter(sample_freq, warmup_data, cut_off_freq=2):
     order = 4
     # filter_b, filter_a = signal.butter(order, cut_off_freq / (sample_freq / 2), 'low', False)
-    filter_b, filter_a = signal.butter(order, cut_off_freq, "low", False, fs=sample_freq)
+    filter_b, filter_a = signal.butter(
+        order, cut_off_freq, "low", False, fs=sample_freq
+    )
     zf = signal.lfilter_zi(filter_b, filter_a)
     _, zf = signal.lfilter(filter_b, filter_a, warmup_data, zi=zf)
     _, filter_zf = signal.lfilter(filter_b, filter_a, warmup_data, zi=zf)
@@ -121,7 +125,7 @@ def get_rotation_matrix_from_vector(rotation_vector):
     if rotation_vector.size >= 4:
         q0 = rotation_vector[3]
     else:
-        q0 = 1 - q1*q1 - q2*q2 - q3*q3
+        q0 = 1 - q1 * q1 - q2 * q2 - q3 * q3
         if q0 > 0:
             q0 = np.sqrt(q0)
         else:
@@ -217,7 +221,9 @@ def compute_steps(acce_datas):
         acce_data = acce_datas[i, :]
         acce_mag = np.sqrt(np.sum(acce_data[1:] ** 2))
 
-        acce_mag_filt, filter_zf = signal.lfilter(filter_b, filter_a, [acce_mag], zi=filter_zf)
+        acce_mag_filt, filter_zf = signal.lfilter(
+            filter_b, filter_a, [acce_mag], zi=filter_zf
+        )
         acce_mag_filt = acce_mag_filt[0]
 
         acce_mag_window = np.append(acce_mag_window, [acce_mag_filt])
@@ -228,6 +234,7 @@ def compute_steps(acce_datas):
 
         # detect valid peak or valley of acceleration magnitudes
         acce_mag_filt_detrend = acce_mag_filt - mean_gravity
+        # if difference is greater than the max of previous detrend value or mag threshold (some std away)
         if acce_mag_filt_detrend > np.max([acce_mag_pre, mag_threshold]):
             # peak
             acce_binarys = np.append(acce_binarys, [1])
@@ -246,11 +253,16 @@ def compute_steps(acce_datas):
             if state_flag == 0:
                 acce_max[:] = acce_data[0], acce_mag_filt
                 state_flag = 1
-            elif (state_flag == 1) and ((acce_data[0] - acce_max[0]) <= interval_threshold) and (
-                    acce_mag_filt > acce_max[1]):
+            elif (
+                (state_flag == 1)
+                and ((acce_data[0] - acce_max[0]) <= interval_threshold)
+                and (acce_mag_filt > acce_max[1])
+            ):
                 # stay on peak but a higher one
                 acce_max[:] = acce_data[0], acce_mag_filt
-            elif (state_flag == 2) and ((acce_data[0] - acce_max[0]) > interval_threshold):
+            elif (state_flag == 2) and (
+                (acce_data[0] - acce_max[0]) > interval_threshold
+            ):
                 # transition from a valley to a peak with interval larger than interval_threshold
                 acce_max[:] = acce_data[0], acce_mag_filt
                 state_flag = 1
@@ -259,20 +271,31 @@ def compute_steps(acce_datas):
         # save step acceleration data: step_acce_max_mins = [timestamp, max, min, variance]
         step_flag = False
         if step_criterion == 2:
-            if (acce_binarys[-1] == -1) and ((acce_binarys[-2] == 1) or (acce_binarys[-2] == 0)):
+            if (acce_binarys[-1] == -1) and (
+                (acce_binarys[-2] == 1) or (acce_binarys[-2] == 0)
+            ):
                 step_flag = True
         elif step_criterion == 3:
-            if (acce_binarys[-1] == -1) and (acce_binarys[-2] == 0) and (np.sum(acce_binarys[:-2]) > 1):
+            if (
+                (acce_binarys[-1] == -1)
+                and (acce_binarys[-2] == 0)
+                and (np.sum(acce_binarys[:-2]) > 1)
+            ):
                 step_flag = True
         else:
             if (acce_binarys[-1] == 0) and acce_binarys[-2] == -1:
-                if (state_flag == 1) and ((acce_data[0] - acce_min[0]) > interval_threshold):
+                if (state_flag == 1) and (
+                    (acce_data[0] - acce_min[0]) > interval_threshold
+                ):
                     # transition from a peak to a valley with ts greater than interval threshold
                     acce_min[:] = acce_data[0], acce_mag_filt
                     state_flag = 2
                     step_flag = True
-                elif (state_flag == 2) and ((acce_data[0] - acce_min[0]) <= interval_threshold) and (
-                        acce_mag_filt < acce_min[1]):
+                elif (
+                    (state_flag == 2)
+                    and ((acce_data[0] - acce_min[0]) <= interval_threshold)
+                    and (acce_mag_filt < acce_min[1])
+                ):
                     # stay in valley but a lower one
                     acce_min[:] = acce_data[0], acce_mag_filt
 
@@ -280,8 +303,11 @@ def compute_steps(acce_datas):
         if step_flag:
             step_timestamps = np.append(step_timestamps, acce_data[0])
             step_indexs = np.append(step_indexs, [i])
-            step_acce_max_mins = np.append(step_acce_max_mins,
-                                           [[acce_data[0], acce_max[1], acce_min[1], acce_std ** 2]], axis=0)
+            step_acce_max_mins = np.append(
+                step_acce_max_mins,
+                [[acce_data[0], acce_max[1], acce_min[1], acce_std ** 2]],
+                axis=0,
+            )
         acce_mag_pre = acce_mag_filt_detrend
 
     return step_timestamps, step_indexs, step_acce_max_mins
@@ -297,29 +323,51 @@ def compute_stride_length(step_acce_max_mins):
 
     stride_lengths = np.zeros((step_acce_max_mins.shape[0], 2))
     k_real = np.zeros((step_acce_max_mins.shape[0], 2))
-    step_timeperiod = np.zeros((step_acce_max_mins.shape[0] - 1, ))
+    step_timeperiod = np.zeros((step_acce_max_mins.shape[0] - 1,))
     stride_lengths[:, 0] = step_acce_max_mins[:, 0]
     window_size = 2
-    step_timeperiod_temp = np.zeros((0, ))
+    step_timeperiod_temp = np.zeros((0,))
 
     # calculate every step period - step_timeperiod unit: second
     for i in range(0, step_timeperiod.shape[0]):
-        step_timeperiod_data = (step_acce_max_mins[i + 1, 0] - step_acce_max_mins[i, 0]) / 1000
+        step_timeperiod_data = (
+            step_acce_max_mins[i + 1, 0] - step_acce_max_mins[i, 0]
+        ) / 1000
         step_timeperiod_temp = np.append(step_timeperiod_temp, [step_timeperiod_data])
         if step_timeperiod_temp.shape[0] > window_size:
             step_timeperiod_temp = np.delete(step_timeperiod_temp, [0])
-        step_timeperiod[i] = np.sum(step_timeperiod_temp) / step_timeperiod_temp.shape[0]
+        step_timeperiod[i] = (
+            np.sum(step_timeperiod_temp) / step_timeperiod_temp.shape[0]
+        )
 
     # calculate parameters by step period and acceleration magnitude variance
     k_real[:, 0] = step_acce_max_mins[:, 0]
     k_real[0, 1] = K
     for i in range(0, step_timeperiod.shape[0]):
-        k_real[i + 1, 1] = np.max([(para_a0 + para_a1 / step_timeperiod[i] + para_a2 * step_acce_max_mins[i, 3]), K_min])
+        k_real[i + 1, 1] = np.max(
+            [
+                (
+                    para_a0
+                    + para_a1 / step_timeperiod[i]
+                    + para_a2 * step_acce_max_mins[i, 3]
+                ),
+                K_min,
+            ]
+        )
         k_real[i + 1, 1] = np.min([k_real[i + 1, 1], K_max]) * (K / K_min)
 
     # calculate every stride length by parameters and max and min data of acceleration magnitude
-    stride_lengths[:, 1] = np.max([(step_acce_max_mins[:, 1] - step_acce_max_mins[:, 2]),
-                                   np.ones((step_acce_max_mins.shape[0], ))], axis=0)**(1 / 4) * k_real[:, 1]
+    stride_lengths[:, 1] = (
+        np.max(
+            [
+                (step_acce_max_mins[:, 1] - step_acce_max_mins[:, 2]),
+                np.ones((step_acce_max_mins.shape[0],)),
+            ],
+            axis=0,
+        )
+        ** (1 / 4)
+        * k_real[:, 1]
+    )
 
     return stride_lengths
 
@@ -338,6 +386,7 @@ def compute_headings(ahrs_datas):
 def compute_step_heading(step_timestamps, headings):
     step_headings = np.zeros((len(step_timestamps), 2))
     step_timestamps_index = 0
+
     for i in range(0, len(headings)):
         if step_timestamps_index < len(step_timestamps):
             if headings[i, 0] == step_timestamps[step_timestamps_index]:
@@ -363,6 +412,7 @@ def compute_rel_positions(stride_lengths, step_headings):
 def compute_step_positions(acce_datas, ahrs_datas, posi_datas):
     step_timestamps, step_indexs, step_acce_max_mins = compute_steps(acce_datas)
     headings = compute_headings(ahrs_datas)
+
     stride_lengths = compute_stride_length(step_acce_max_mins)
     step_headings = compute_step_heading(step_timestamps, headings)
     rel_positions = compute_rel_positions(stride_lengths, step_headings)

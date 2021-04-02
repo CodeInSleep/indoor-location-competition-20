@@ -6,15 +6,49 @@ def save_figure_to_html(fig, filename):
     fig.write_html(filename)
 
 
-def visualize_trajectory(trajectory, floor_plan_filename, width_meter, height_meter, title=None, mode='lines + markers + text', show=False):
-    fig = go.Figure()
+def visualize_trajectory(trajectory, floor_plan_filename, width_meter, height_meter, title=None, mode='lines + markers + text', show=False, fig=None):
+    trajectory_color = 'rgba(4, 174, 4, 0.5)' if fig is None else 'rgba(174, 4, 4, 0.5)'
+    if fig is None:
+        fig = go.Figure()
+
+        # add floor plan
+        floor_plan = Image.open(floor_plan_filename)
+        fig.update_layout(images=[
+            go.layout.Image(
+                source=floor_plan,
+                xref="x",
+                yref="y",
+                x=0,
+                y=height_meter,
+                sizex=width_meter,
+                sizey=height_meter,
+                sizing="contain",
+                opacity=1,
+                layer="below",
+            )
+        ])
+
+        # configure
+        fig.update_xaxes(autorange=False, range=[0, width_meter])
+        fig.update_yaxes(autorange=False, range=[0, height_meter], scaleanchor="x", scaleratio=1)
+        fig.update_layout(
+            title=go.layout.Title(
+                text=title or "No title.",
+                xref="paper",
+                x=0,
+            ),
+            autosize=True,
+            width=900,
+            height=200 + 900 * height_meter / width_meter,
+            template="plotly_white",
+        )
 
     # add trajectory
     size_list = [6] * trajectory.shape[0]
     size_list[0] = 10
     size_list[-1] = 10
-
-    color_list = ['rgba(4, 174, 4, 0.5)'] * trajectory.shape[0]
+   
+    color_list = [trajectory_color] * trajectory.shape[0]
     color_list[0] = 'rgba(12, 5, 235, 1)'
     color_list[-1] = 'rgba(235, 5, 5, 1)'
 
@@ -40,38 +74,6 @@ def visualize_trajectory(trajectory, floor_plan_filename, width_meter, height_me
             textposition="top center",
             name='trajectory',
         ))
-
-    # add floor plan
-    floor_plan = Image.open(floor_plan_filename)
-    fig.update_layout(images=[
-        go.layout.Image(
-            source=floor_plan,
-            xref="x",
-            yref="y",
-            x=0,
-            y=height_meter,
-            sizex=width_meter,
-            sizey=height_meter,
-            sizing="contain",
-            opacity=1,
-            layer="below",
-        )
-    ])
-
-    # configure
-    fig.update_xaxes(autorange=False, range=[0, width_meter])
-    fig.update_yaxes(autorange=False, range=[0, height_meter], scaleanchor="x", scaleratio=1)
-    fig.update_layout(
-        title=go.layout.Title(
-            text=title or "No title.",
-            xref="paper",
-            x=0,
-        ),
-        autosize=True,
-        width=900,
-        height=200 + 900 * height_meter / width_meter,
-        template="plotly_white",
-    )
 
     if show:
         fig.show()
